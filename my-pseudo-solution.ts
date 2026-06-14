@@ -79,40 +79,61 @@ interface QueryOptions {
 class CustomerAnalyticsRecalculationJob {
   customerRepository: CustomerRepository;
   orderRepository: OrderRepository;
+  batchSize: number;
+  concurrency: number;
   constructor(
     orderRepository: OrderRepository,
-    customerRepository: CustomerRepository
+    customerRepository: CustomerRepository,
+    batchSize = 1000,
+    concurrency = 8
   ) {
     this.orderRepository = orderRepository;
     this.customerRepository = customerRepository;
+    this.batchSize = batchSize;
+    this.concurrency = concurrency;
   }
 
   async recalculate(fromDate: any, toDate: any) {
-    const limit = 100;
     let cursor = null;
+    const batches: number[][] = [];
 
-    do {
+    while (true) {
       const affectedCustomerIds =
         await this.orderRepository.findAffectedCustomerIds({
           fromDate,
           toDate,
           cursor,
-          limit
+          limit: this.batchSize
         });
 
       if (affectedCustomerIds.length === 0) {
         break;
       }
 
-      const analytics =
-        await this.orderRepository.calculateAnalyticsForCustomers(
-          affectedCustomerIds
-        );
-
-      await this.customerRepository.updateAnalytics(analytics);
-
+      batches.push(affectedCustomerIds);
       cursor = affectedCustomerIds.at(-1) ?? null;
-    } while (cursor);
+    }
+
+    await this.processBatches(batches);
+  }
+
+  private async processBatches(batches: number[][]): Promise<void> {
+    let nextBatchIndex = 0;
+    const processorCount = Math.min(this.concurrency, batches.length);
+
+    const processors = Array.from({ length: processorCount }, async () => {
+      while (nextBatchIndex < batches.length) {
+        const batch = batches[nextBatchIndex];
+        nextBatchIndex += 1;
+
+        const analytics =
+          await this.orderRepository.calculateAnalyticsForCustomers(batch);
+
+        await this.customerRepository.updateAnalytics(analytics);
+      }
+    });
+
+    await Promise.all(processors);
   }
 }
 

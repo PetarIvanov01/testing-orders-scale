@@ -40,10 +40,6 @@ class CustomerAnalyticsRecalculationJob {
     fromDate: Date,
     toDate: Date
   ): Promise<RecalculationResult> {
-    if (fromDate >= toDate) {
-      throw new Error("fromDate must be before toDate");
-    }
-
     const startedAt = Date.now();
     let cursor: number | null = null;
     let affectedCustomers = 0;
