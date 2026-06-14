@@ -82,18 +82,3 @@ reduced runtime from 11,241 ms to 4,690 ms.
 
 The fastest observed run in this pass was `BATCH_SIZE=1000` with
 `RECALCULATION_CONCURRENCY=8`.
-
-## Notes
-
-`BATCH_SIZE=10000` with `RECALCULATION_CONCURRENCY=8` failed on the larger
-dataset because Postgres could not resize a shared memory segment inside the
-Docker container. Lower concurrency or smaller batches avoid that container
-resource limit.
-
-Very large update batches can also hit bind-parameter limits because the
-current `UPDATE ... FROM (VALUES ...)` implementation uses four bind parameters
-per updated customer row.
-
-```
-
-```
