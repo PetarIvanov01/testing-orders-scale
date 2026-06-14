@@ -32,25 +32,6 @@ order_line_items
 - unit_price
 ```
 
-```sql 
-
-  SELECT * 
-  FROM  orders 
-  WHERE status = "completed" 
-  AND created_at BETWEEN {fromDate} AND {toDate};
-
-  SELECT
-   o.id AS orderId,
-   SUM(ol.quantity * ol.unit_price) AS totalSpent
-  FROM orders AS o 
-  JOIN order_line_items AS ol 
-    ON ol.order_id = o.id 
-  WHERE o.status = "completed"
-   AND o.processed_at BETWEEN {fromDate} AND {toDate}
-  Group BY o.id; -> Calculate the totalSpent per order
-
-```
-
 ## Task
 
 Implement a background service that recalculates customer analytics.
@@ -209,12 +190,12 @@ class CustomerRepository {
     await this.customerModel
       .query()
       .insert(
-      analyticsRows.map((analytics) => ({
-        id: analytics.customerId,
-        totalSpent: analytics.totalSpent,
-        ordersCount: analytics.ordersCount,
-        lastOrderAt: analytics.lastOrderAt
-      }))
+        analyticsRows.map((analytics) => ({
+          id: analytics.customerId,
+          totalSpent: analytics.totalSpent,
+          ordersCount: analytics.ordersCount,
+          lastOrderAt: analytics.lastOrderAt
+        }))
       )
       .onConflict("id")
       .merge(["totalSpent", "ordersCount", "lastOrderAt"]);
