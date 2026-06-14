@@ -1,0 +1,195 @@
+/*
+# Customer Analytics Recalculation Job
+## Context
+You are working on an e-commerce platform. The system stores customers, orders, and order line items.
+The platform has millions of orders.
+
+We use JavaScript / Node.js and an ORM such as Sequelize, TypeORM, Prisma, or Objection.js.
+
+## Database Schema
+
+```sql
+customers
+- id
+- email
+- total_spent
+- orders_count
+- last_order_at
+- created_at
+
+orders
+- id
+- customer_id -> customers
+- status
+- processed_at
+- created_at
+
+order_line_items
+- id
+- order_id -> orders
+- product_id
+- quantity
+- unit_price
+```
+
+```sql 
+
+  SELECT * 
+  FROM  orders 
+  WHERE status = "completed" 
+  AND created_at BETWEEN {fromDate} AND {toDate};
+
+  SELECT
+   o.id AS orderId,
+   SUM(ol.quantity * ol.unit_price) AS totalSpent
+  FROM orders AS o 
+  JOIN order_line_items AS ol 
+    ON ol.order_id = o.id 
+  WHERE o.status = "completed"
+   AND o.processed_at BETWEEN {fromDate} AND {toDate}
+  Group BY o.id; -> Calculate the totalSpent per order
+
+```
+
+## Task
+
+Implement a background service that recalculates customer analytics.
+
+The service should expose the following method:
+The method should find all customers that have orders in the given period and recalculate their analytics fields.
+Save the results in the database
+
+```js
+totalSpent = sum of total_price of all completed orders []
+ordersCount = count of all completed orders []
+lastOrderAt = date of the latest completed order []
+```
+
+## Skeleton
+*/
+import { raw } from "orm";
+
+interface QueryOptions {
+  fromDate: Date;
+  toDate: Date;
+  cursor: number | null;
+  limit: number;
+}
+
+class CustomerAnalyticsRecalculationJob {
+  customerRepository: CustomerRepository;
+  orderRepository: OrderRepository;
+  constructor(
+    orderRepository: OrderRepository,
+    customerRepository: CustomerRepository
+  ) {
+    this.orderRepository = orderRepository;
+    this.customerRepository = customerRepository;
+  }
+
+  async recalculate(fromDate: any, toDate: any) {
+    const limit = 100;
+    let cursor = null;
+
+    do {
+      const affectedCustomerIds =
+        await this.orderRepository.findAffectedCustomerIds({
+          fromDate,
+          toDate,
+          cursor,
+          limit
+        });
+
+      if (affectedCustomerIds.length === 0) {
+        break;
+      }
+
+      const analytics =
+        await this.orderRepository.calculateAnalyticsForCustomers(
+          affectedCustomerIds
+        );
+
+      await this.customerRepository.updateAnalytics(analytics);
+
+      cursor = affectedCustomerIds.at(-1) ?? null;
+    } while (cursor);
+  }
+}
+
+/* order.service.ts */
+class OrderRepository {
+  orderModel: any;
+  constructor(orderModel: any) {
+    this.orderModel = orderModel;
+  }
+  async findAffectedCustomerIds({
+    fromDate,
+    toDate,
+    cursor,
+    limit
+  }: QueryOptions): Promise<number[]> {
+    let query = this.orderModel
+      .query()
+      .select("orders.customer_id")
+      .where("orders.status", "completed")
+      .where("orders.processed_at", ">=", fromDate)
+      .where("orders.processed_at", "<", toDate)
+      .groupBy("orders.customer_id")
+      .orderBy("orders.customer_id", "asc")
+      .limit(limit);
+
+    if (cursor !== null) {
+      query = query.where("orders.customer_id", ">", cursor);
+    }
+
+    return await query.run();
+  }
+
+  async calculateAnalyticsForCustomers(
+    customerIds: number[]
+  ): Promise<CustomerAnalytics[]> {
+    return this.orderModel
+      .query()
+      .select({
+        customerId: "orders.customer_id",
+        totalSpent: raw(
+          "SUM(order_line_items.quantity * order_line_items.unit_price)"
+        ),
+        ordersCount: raw("COUNT(DISTINCT orders.id)"),
+        lastOrderAt: raw("MAX(orders.processed_at)")
+      })
+      .join("order_line_items", "order_line_items.order_id", "orders.id")
+      .where("orders.status", "completed")
+      .whereIn("orders.customer_id", customerIds)
+      .groupBy("orders.customer_id")
+      .run();
+  }
+}
+
+/* customer.service.ts */
+interface CustomerAnalytics {
+  customerId: number;
+  totalSpent: number;
+  ordersCount: number;
+  lastOrderAt: Date | null;
+}
+
+class CustomerRepository {
+  customerModel: any;
+  constructor(customerModel: any) {
+    this.customerModel = customerModel;
+  }
+
+  async updateAnalytics(analyticsRows: CustomerAnalytics[]): Promise<void> {
+    for (const analytics of analyticsRows) {
+      await this.customerModel
+        .query()
+        .where("customers.id", analytics.customerId)
+        .update({
+          totalSpent: analytics.totalSpent,
+          ordersCount: analytics.ordersCount,
+          lastOrderAt: analytics.lastOrderAt
+        });
+    }
+  }
+}

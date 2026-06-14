@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: customer-analytics-postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d:ro
+      - ./seed:/seed:ro
+    environment:
+      POSTGRES_DB: customer_analytics
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app_password
+      SEED_ON_INIT: ${SEED_ON_INIT:-false}
+      CUSTOMER_COUNT: ${CUSTOMER_COUNT:-10000}
+      MIN_ORDERS: ${MIN_ORDERS:-5}
+      MAX_ORDERS: ${MAX_ORDERS:-10}
+      MIN_ITEMS: ${MIN_ITEMS:-2}
+      MAX_ITEMS: ${MAX_ITEMS:-5}
+      BATCH_SIZE: ${BATCH_SIZE:-100}
+      PRODUCT_COUNT: ${PRODUCT_COUNT:-100000}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d customer_analytics"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: customer-analytics-pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin_password
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
+
+volumes:
+  postgres-data:
+  pgadmin-data:

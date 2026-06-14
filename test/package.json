@@ -1,0 +1,24 @@
+{
+  "name": "customer-analytics-test",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "docker:up": "docker compose --env-file .env.seed -f docker-compose.yml up -d",
+    "docker:down": "docker compose -f docker-compose.yml down",
+    "docker:reset": "docker compose -f docker-compose.yml down -v && docker compose --env-file .env.seed -f docker-compose.yml up -d",
+    "docker:logs": "docker logs -f customer-analytics-postgres",
+    "db:counts": "docker exec customer-analytics-postgres psql -U app -d customer_analytics -c \"SELECT (SELECT COUNT(*) FROM customers) AS customers, (SELECT COUNT(*) FROM orders) AS orders, (SELECT COUNT(*) FROM order_line_items) AS order_line_items;\"",
+    "recalculate": "node --env-file=.env.recalculate --import tsx run-recalculation.ts",
+    "seed": "npm run docker:reset",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "knex": "^3.1.0",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
