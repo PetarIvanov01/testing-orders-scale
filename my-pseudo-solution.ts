@@ -202,15 +202,17 @@ class CustomerRepository {
   }
 
   async updateAnalytics(analyticsRows: CustomerAnalytics[]): Promise<void> {
-    for (const analytics of analyticsRows) {
-      await this.customerModel
-        .query()
-        .where("customers.id", analytics.customerId)
-        .update({
-          totalSpent: analytics.totalSpent,
-          ordersCount: analytics.ordersCount,
-          lastOrderAt: analytics.lastOrderAt
-        });
+    if (analyticsRows.length === 0) {
+      return;
     }
+
+    await this.customerModel.bulkUpdate(
+      analyticsRows.map((analytics) => ({
+        id: analytics.customerId,
+        totalSpent: analytics.totalSpent,
+        ordersCount: analytics.ordersCount,
+        lastOrderAt: analytics.lastOrderAt
+      }))
+    );
   }
 }
