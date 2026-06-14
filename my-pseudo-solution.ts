@@ -206,13 +206,17 @@ class CustomerRepository {
       return;
     }
 
-    await this.customerModel.bulkUpdate(
+    await this.customerModel
+      .query()
+      .insert(
       analyticsRows.map((analytics) => ({
         id: analytics.customerId,
         totalSpent: analytics.totalSpent,
         ordersCount: analytics.ordersCount,
         lastOrderAt: analytics.lastOrderAt
       }))
-    );
+      )
+      .onConflict("id")
+      .merge(["totalSpent", "ordersCount", "lastOrderAt"]);
   }
 }
